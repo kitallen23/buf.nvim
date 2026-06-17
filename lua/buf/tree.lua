@@ -182,6 +182,10 @@ M.build = function()
   local tree = H.build_tree(tree_bufs, cwd)
   local collapsed_tree = H.collapse_tree(tree)
 
+  table.sort(other_bufs, function(a, b)
+    return a.path < b.path
+  end)
+
   return H.sort_tree(collapsed_tree), other_bufs
 end
 return M
