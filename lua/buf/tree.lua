@@ -1,11 +1,13 @@
 local H = {}
 
+---@return integer[]
 H.get_buffers = function()
   return vim.tbl_filter(function(buf)
     return vim.bo[buf].buflisted
   end, vim.api.nvim_list_bufs())
 end
 
+---@return string
 H.get_buf_kind = function(buf, path)
   local buftype = vim.bo[buf].buftype
 
@@ -174,6 +176,8 @@ H.sort_tree = function(tree)
 end
 
 local M = {}
+
+---@return TreeNode[], BufEntry[]
 M.build = function()
   local cwd = assert(vim.uv.cwd())
   local buffers = H.get_buffers()
@@ -188,4 +192,5 @@ M.build = function()
 
   return H.sort_tree(collapsed_tree), other_bufs
 end
+
 return M
