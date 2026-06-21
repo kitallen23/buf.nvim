@@ -53,31 +53,31 @@ H.classify_buffers = function(buffers, cwd)
 end
 
 ---@class TreeNode
----@field type "file"|"dir"
+---@field is_dir boolean
 ---@field name string
+---@field path string
 ---@field children TreeNode[]|nil
 ---@field buf integer|nil
----@field path string|nil
 ---@field kind string|nil
 
 -- Builds a nested tree from a flat list of BufEntry items.
 -- Example output for src/components/Button.lua, src/utils/foo.lua, README.md:
 -- {
---   { type = "dir", name = "src/", children = {
---       { type = "dir", name = "components/", children = {
---           { type = "file", name = "Button.lua", buf = 1, path = "...", kind = "file" },
+--   { is_dir = true, name = "src", path = "src", children = {
+--       { is_dir = true, name = "components", path = "src/components", children = {
+--           { is_dir = false, name = "Button.lua", buf = 1, path = "...", kind = "file" },
 --       }},
---       { type = "dir", name = "utils/", children = {
---           { type = "file", name = "foo.lua", buf = 2, path = "...", kind = "file" },
+--       { is_dir = true, name = "utils", path = "src/utils", children = {
+--           { is_dir = false, name = "foo.lua", buf = 2, path = "...", kind = "file" },
 --       }},
 --   }},
---   { type = "file", name = "README.md", buf = 3, path = "...", kind = "file" },
+--   { is_dir = false, name = "README.md", buf = 3, path = "...", kind = "file" },
 -- }
 ---@param tree_bufs BufEntry[]
 ---@param cwd string
 ---@return TreeNode[]
 H.build_tree = function(tree_bufs, cwd)
-  local root = { type = "dir", name = "", children = {} }
+  local root = { is_dir = true, name = "", children = {} }
 
   for _, buf_item in ipairs(tree_bufs) do
     local current = root.children
@@ -87,7 +87,7 @@ H.build_tree = function(tree_bufs, cwd)
     for i, path_part in ipairs(parts) do
       if i == #parts then
         table.insert(current, {
-          type = "file",
+          is_dir = false,
           name = path_part,
           buf = buf_item.buf,
           path = relative_path,
@@ -96,7 +96,7 @@ H.build_tree = function(tree_bufs, cwd)
       else
         local existing_dir = nil
         for _, node in ipairs(current) do
-          if node.type == "dir" and node.name == path_part then
+          if node.is_dir and node.name == path_part then
             existing_dir = node
             break
           end
@@ -105,9 +105,10 @@ H.build_tree = function(tree_bufs, cwd)
         if existing_dir then
           current = existing_dir.children
         else
+          local dir_path = table.concat(parts, "/", 1, i)
           table.insert(
             current,
-            { type = "dir", name = path_part, children = {} }
+            { is_dir = true, name = path_part, path = dir_path, children = {} }
           )
           current = current[#current].children
         end
@@ -126,18 +127,20 @@ end
 H.collapse_tree = function(tree)
   local result = {}
   for _, node in ipairs(tree) do
-    if node.type == "dir" then
+    if node.is_dir then
       local children = H.collapse_tree(node.children)
-      if #children == 1 and children[1].type == "dir" then
+      if #children == 1 and children[1].is_dir then
         table.insert(result, {
-          type = node.type,
+          is_dir = node.is_dir,
           name = node.name .. "/" .. children[1].name,
+          path = children[1].path,
           children = children[1].children,
         })
       else
         table.insert(result, {
-          type = node.type,
+          is_dir = node.is_dir,
           name = node.name,
+          path = node.path,
           children = children,
         })
       end
@@ -155,17 +158,18 @@ end
 H.sort_tree = function(tree)
   local sorted = vim.deepcopy(tree)
   table.sort(sorted, function(a, b)
-    if a.type ~= b.type then
-      return a.type == "dir"
+    if a.is_dir ~= b.is_dir then
+      return a.is_dir == true
     end
     return a.name < b.name
   end)
   local result = {}
   for _, node in ipairs(sorted) do
-    if node.type == "dir" then
+    if node.is_dir then
       table.insert(result, {
-        type = node.type,
+        is_dir = node.is_dir,
         name = node.name,
+        path = node.path,
         children = H.sort_tree(node.children),
       })
     else

@@ -10,13 +10,22 @@ local H = {}
 ---@param lines string[]
 ---@param line_map table<integer, BufEntry>
 ---@param depth number
+---@param width integer
 H.render_tree = function(tree, lines, line_map, depth, width)
   for _, node in ipairs(tree) do
-    if node.type == "dir" then
-      table.insert(lines, H.format_line(node.name, "dir", depth, width))
+    if node.is_dir then
+      -- Dirs display as (possibly collapsed) paths, e.g. "lua/buf" - truncate
+      -- from the start so the innermost, most specific segment stays visible.
+      local line_str =
+        H.format_line(node.name, true, node.path, depth, width, "left")
+      table.insert(lines, line_str)
       H.render_tree(node.children, lines, line_map, depth + 1, width)
     else
-      table.insert(lines, H.format_line(node.name, node.kind, depth, width))
+      -- Files display as bare names - truncate from the end, matching how
+      -- names are normally read left-to-right.
+      local line_str =
+        H.format_line(node.name, false, node.path, depth, width, "right")
+      table.insert(lines, line_str)
       line_map[#lines] = { buf = node.buf, path = node.path, kind = node.kind }
     end
   end
@@ -25,39 +34,76 @@ end
 ---@param other_bufs BufEntry[]
 ---@param lines string[]
 ---@param line_map table<integer, BufEntry>
+---@param width integer
 H.render_other = function(other_bufs, lines, line_map, width)
   table.insert(lines, "  other")
   for _, buf_entry in ipairs(other_bufs) do
-    table.insert(lines, H.format_line(buf_entry.path, buf_entry.kind, 0, width))
+    -- Other-section entries show their full absolute path (they live outside
+    -- cwd), so they truncate left like dirs, not right like tree files.
+    local line_str =
+      H.format_line(buf_entry.path, false, buf_entry.path, 0, width, "left")
+    table.insert(lines, line_str)
     line_map[#lines] = buf_entry
   end
 end
 
-  -- TODO: Finish this fn
+-- Shortens `name` with an ellipsis if it overflows the space left after
+-- indent and icon are accounted for. `truncate_side` picks which end gets
+-- cut: "left" keeps the tail (for path-like strings, where the rightmost
+-- segment is the most identifying part), "right" keeps the front (for bare
+-- names, read left-to-right as usual).
 ---@param name string
----@param kind string
----@param depth integer
+---@param line_width integer
+---@param indent_width integer
+---@param icon_width integer
+---@param truncate_side "left" | "right"
 ---@return string
-H.format_line = function(name, kind, depth, width)
-  local indent_width = depth * 2
-  local icon_width = 0
+H.fit_to_width = function(
+  name,
+  line_width,
+  indent_width,
+  icon_width,
+  truncate_side
+)
+  local name_width = line_width - indent_width - icon_width
 
-  local line_str = name
+  if #name > name_width then
+    if truncate_side == "left" then
+      return "…" .. string.sub(name, #name - name_width + 2)
+    else
+      return string.sub(name, 1, name_width - 1) .. "…"
+    end
+  end
+  return name
+end
+
+---@param name string
+---@param is_dir boolean
+---@param path string
+---@param depth integer
+---@param width integer
+---@param truncate_side "left" | "right"
+---@return string, HighlightSpec|nil
+H.format_line = function(name, is_dir, path, depth, width, truncate_side)
+  local indent_width = depth * 2
 
   ---@diagnostic disable-next-line: undefined-field
-  if _G.MiniIcons ~= nil then
-    icon_width = 2
-  -- else
-    -- if #line_str > width then
-    --   line_str = "<" .. string.sub(line_str, #line_str - width + 2)
-    -- end
+  if _G.MiniIcons == nil then
+    return H.fit_to_width(name, width, indent_width, 0, truncate_side), nil
   end
-  local name_width = width - indent_width - icon_width
 
-  -- if #line_str > name_width then
-  -- end
-  -- line_str = 
-  return line_str
+  local category = is_dir and "directory" or "file"
+  local icon, hl = _G.MiniIcons.get(category, path)
+  local truncated_name =
+    H.fit_to_width(name, width, indent_width, 2, truncate_side)
+  local line_str = icon .. " " .. truncated_name
+
+  local highlight = {
+    col_start = indent_width,
+    col_end = indent_width + #icon,
+    hl_group = hl,
+  }
+  return line_str, highlight
 end
 
 local M = {}
