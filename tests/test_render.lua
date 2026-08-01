@@ -3,90 +3,115 @@ local T = MiniTest.new_set()
 
 local render = require("buf.render")
 
-T["fit_to_width"] = MiniTest.new_set()
-T["fit_to_width"]["truncates left, keeping the tail"] = function()
-  local truncated = render._H.fit_to_width(
-    "a_very_long_filename_that_needs_to_wrap",
-    20,
-    0,
-    0,
-    "left"
-  )
-  MiniTest.expect.equality(truncated, "…_that_needs_to_wrap")
-end
-T["fit_to_width"]["truncates right, keeping the head"] = function()
-  local truncated = render._H.fit_to_width(
-    "a_very_long_filename_that_needs_to_wrap",
-    20,
-    0,
-    0,
-    "right"
-  )
-  MiniTest.expect.equality(truncated, "a_very_long_filenam…")
-end
-T["fit_to_width"]["doesn't truncate left or right with short strings"] = function()
-  local test_str = "short"
-  local truncated_left = render._H.fit_to_width(test_str, 20, 0, 0, "left")
-  local truncated_right = render._H.fit_to_width(test_str, 20, 0, 0, "right")
-  MiniTest.expect.equality(truncated_left, test_str)
-  MiniTest.expect.equality(truncated_right, test_str)
+-- Runs fit_to_width for both truncate_side values and asserts the results
+-- against expected_left/expected_right in one call, since most cases test
+-- both sides against the same input.
+---@param name string
+---@param line_width number
+---@param indent_width number
+---@param icon_width number
+---@param expected_left string
+---@param expected_right string
+local function assert_fit(
+  name,
+  line_width,
+  indent_width,
+  icon_width,
+  expected_left,
+  expected_right
+)
+  local left =
+    render._H.fit_to_width(name, line_width, indent_width, icon_width, "left")
+  local right =
+    render._H.fit_to_width(name, line_width, indent_width, icon_width, "right")
+  MiniTest.expect.equality(left, expected_left)
+  MiniTest.expect.equality(right, expected_right)
 end
 
-T["fit_to_width"]["boundary conditions"] = MiniTest.new_set()
-local boundary = T["fit_to_width"]["boundary conditions"]
-boundary["doesn't truncate when the name is exactly the width of the budget"] = function()
-  local test_str = "123456789"
-  local truncated = render._H.fit_to_width(test_str, 9, 0, 0, "left")
-  MiniTest.expect.equality(truncated, test_str)
-end
-boundary["truncates when the name is exactly one character over the budget"] = function()
-  local test_str = "123456789"
-  local truncated_left = render._H.fit_to_width(test_str, 8, 0, 0, "left")
-  local truncated_right = render._H.fit_to_width(test_str, 8, 0, 0, "right")
-  MiniTest.expect.equality(truncated_left, "…3456789")
-  MiniTest.expect.equality(truncated_right, "1234567…")
-end
+T["fit_to_width"] = MiniTest.new_set(nil, {
+  ["truncates left, keeping the tail"] = function()
+    local truncated = render._H.fit_to_width(
+      "a_very_long_filename_that_needs_to_wrap",
+      20,
+      0,
+      0,
+      "left"
+    )
+    MiniTest.expect.equality(truncated, "…_that_needs_to_wrap")
+  end,
+  ["truncates right, keeping the head"] = function()
+    local truncated = render._H.fit_to_width(
+      "a_very_long_filename_that_needs_to_wrap",
+      20,
+      0,
+      0,
+      "right"
+    )
+    MiniTest.expect.equality(truncated, "a_very_long_filenam…")
+  end,
+  ["doesn't truncate left or right with short strings"] = function()
+    local test_str = "short"
+    assert_fit(test_str, 20, 0, 0, test_str, test_str)
+  end,
 
--- icon_width and indent_width actually eating into the budget
---- "accounts for icon width when computing how much of the name fits" — a case
---- with icon_width > 0 and indent_width = 0, checking the truncation point
---- shifts accordingly.
---- "accounts for indent and icon width together when computing how much of the
---- name fits" — both non-zero at once, since they're summed together in
---- name_width and could mask a bug in either one alone.
-T["fit_to_width"]["icon_width and indent_width use budget"] = MiniTest.new_set()
-local icon_and_indent_width =
-  T["fit_to_width"]["icon_width and indent_width use budget"]
-icon_and_indent_width["accounts for icon width when computing how much of the name fits"] = function() end
-icon_and_indent_width["accounts for indent and icon width together when computing how much of the name fits"] = function() end
+  ["boundary conditions"] = MiniTest.new_set(nil, {
+    ["doesn't truncate when the name is exactly the width of the budget"] = function()
+      local test_str = "123456789"
+      local truncated = render._H.fit_to_width(test_str, 9, 0, 0, "left")
+      MiniTest.expect.equality(truncated, test_str)
+    end,
+    ["truncates when the name is exactly one character over the budget"] = function()
+      assert_fit("123456789", 8, 0, 0, "…3456789", "1234567…")
+    end,
+  }),
 
--- Extreme/narrow widths
---- "truncates down to just the ellipsis when the budget leaves no room for any
---- characters" — name_width at 1 or 0, checking it doesn't error or produce
---- something malformed.
---- "doesn't error when indent and icon width alone exceed the line width" —
---- name_width computes negative; worth knowing what actually happens (crash?
---- empty string? something weird) rather than assuming.
-T["fit_to_width"]["extreme_widths"] = MiniTest.new_set()
-local extreme_widths = T["fit_to_width"]["extreme_widths"]
-extreme_widths["truncates down to just the ellipsis when the budget leaves no room for any characters"] = function() end
-extreme_widths["doesn't error when indent and icon width alone exceed the line width"] = function() end
+  ["icon_width and indent_width use budget"] = MiniTest.new_set(nil, {
+    ["accounts for icon width when computing how much of the name fits"] = function()
+      assert_fit("123456789", 8, 0, 4, "…789", "123…")
+    end,
+    ["accounts for indent and icon width together when computing how much of the name fits"] = function()
+      assert_fit("123456789", 8, 2, 1, "…6789", "1234…")
+    end,
+  }),
 
--- Input edge cases
---- "returns an empty string unchanged" — trivial, but worth locking in
---- since "" is a plausible real input (e.g. an unnamed buffer).
+  ["extreme widths"] = MiniTest.new_set(nil, {
+    ["truncates down to just the ellipsis when the budget leaves room for a single character"] = function()
+      local test_str = "123456789"
+      local ellipsis_only = render._H.fit_to_width(test_str, 9, 4, 4, "left")
+      MiniTest.expect.equality(ellipsis_only, "…")
+    end,
+    ["truncates down to empty string when the budget leaves no room for any characters"] = function()
+      local test_str = "123456789"
+      local empty_string = render._H.fit_to_width(test_str, 9, 5, 4, "left")
+      MiniTest.expect.equality(empty_string, "")
+    end,
+    ["doesn't error when indent and icon width alone exceed the line width"] = function()
+      local test_str = "123456789"
+      local empty_string = render._H.fit_to_width(test_str, 9, 10, 10, "left")
+      MiniTest.expect.equality(empty_string, "")
+    end,
+  }),
 
--- Multi-byte characters (this one might actually surface a real bug, not just
--- confirm existing behavior)
---- "doesn't mangle a multi-byte character when truncating near it" — a name
---- with a non-ASCII character (e.g. an accented letter or emoji) positioned
---- right at the truncation boundary. #name counts bytes, not display columns,
---- and string.sub cuts on byte offsets — so a truncation point landing
---- mid-character could produce invalid UTF-8. Worth writing even if you expect
---- it to fail, since that tells you something real about current behavior.
+  ["input edge cases"] = MiniTest.new_set(nil, {
+    ["returns an empty string unchanged"] = function()
+      assert_fit("", 9, 2, 2, "", "")
+    end,
+  }),
 
--- That last category is the one I'd prioritize if you only pick a few — it's
--- testing something you haven't reasoned through by hand yet, unlike the others
--- which mostly confirm formulas you already derived.
+  ["multi-byte characters"] = MiniTest.new_set(nil, {
+    ["doesn't mangle a multi-byte single-column character when truncating near it"] = function()
+      -- bytes: a b c [0xC3 0xA9] x y z (8 bytes total)
+      local name = "abc" .. "é" .. "xyz"
+      -- with line_width = 5, name_width - 1 = 4, landing on byte 4 = 0xC3
+      -- (é's first byte)
+      assert_fit(name, 5, 0, 0, "…éxyz", "abcé…")
+    end,
+    ["doesn't mangle a multi-byte multi-column character when truncating near it"] = function()
+      local name = "あabc" .. "中" .. "xyzあ"
+      assert_fit(name, 8, 0, 0, "…中xyzあ", "あabc中…")
+      assert_fit(name, 7, 0, 0, "…xyzあ", "あabc…")
+    end,
+  }),
+})
 
 return T

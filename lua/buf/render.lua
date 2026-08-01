@@ -71,7 +71,11 @@ end
 -- indent and icon are accounted for. `truncate_side` picks which end gets
 -- cut: "left" keeps the tail (for path-like strings, where the rightmost
 -- segment is the most identifying part), "right" keeps the front (for bare
--- names, read left-to-right as usual).
+-- names, read left-to-right as usual). Measured in display columns rather
+-- than bytes: some characters take multiple bytes but one column (e.g.
+-- "é"), others take two columns despite being one character (e.g. many CJK
+-- characters and emoji), so byte length can't stand in for width in either
+-- direction.
 ---@param name string
 ---@param line_width integer
 ---@param indent_width integer
@@ -87,14 +91,53 @@ H.fit_to_width = function(
 )
   local name_width = line_width - indent_width - icon_width
 
-  if #name > name_width then
-    if truncate_side == "left" then
-      return "…" .. string.sub(name, #name - name_width + 2)
-    else
-      return string.sub(name, 1, name_width - 1) .. "…"
-    end
+  if name_width <= 0 then
+    return ""
   end
-  return name
+
+  if vim.fn.strwidth(name) <= name_width then
+    return name
+  end
+
+  -- The ellipsis itself occupies one column of the budget.
+  local char_budget = name_width - 1
+  if char_budget <= 0 then
+    return "…"
+  end
+
+  if truncate_side == "right" then
+    local kept = ""
+    local width = 0
+    local idx = 1
+    while idx <= #name do
+      local char_end = idx + vim.str_utf_end(name, idx)
+      local char = string.sub(name, idx, char_end)
+      local char_width = vim.fn.strwidth(char)
+      if width + char_width > char_budget then
+        break
+      end
+      kept = kept .. char
+      width = width + char_width
+      idx = char_end + 1
+    end
+    return kept .. "…"
+  else
+    local kept = ""
+    local width = 0
+    local idx = #name
+    while idx >= 1 do
+      local char_start = idx + vim.str_utf_start(name, idx)
+      local char = string.sub(name, char_start, idx)
+      local char_width = vim.fn.strwidth(char)
+      if width + char_width > char_budget then
+        break
+      end
+      kept = char .. kept
+      width = width + char_width
+      idx = char_start - 1
+    end
+    return "…" .. kept
+  end
 end
 
 ---@param name string
