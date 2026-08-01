@@ -9,23 +9,39 @@ local H = {}
 ---@param tree TreeNode[]
 ---@param lines string[]
 ---@param line_map table<integer, BufEntry>
+---@param highlights HighlightSpec[]
 ---@param depth number
 ---@param width integer
-H.render_tree = function(tree, lines, line_map, depth, width)
+H.render_tree = function(tree, lines, line_map, highlights, depth, width)
   for _, node in ipairs(tree) do
     if node.is_dir then
       -- Dirs display as (possibly collapsed) paths, e.g. "lua/buf" - truncate
       -- from the start so the innermost, most specific segment stays visible.
-      local line_str =
+      local line_str, highlight =
         H.format_line(node.name, true, node.path, depth, width, "left")
       table.insert(lines, line_str)
-      H.render_tree(node.children, lines, line_map, depth + 1, width)
+      if highlight ~= nil then
+        highlight.line = #lines
+        table.insert(highlights, highlight)
+      end
+      H.render_tree(
+        node.children,
+        lines,
+        line_map,
+        highlights,
+        depth + 1,
+        width
+      )
     else
       -- Files display as bare names - truncate from the end, matching how
       -- names are normally read left-to-right.
-      local line_str =
+      local line_str, highlight =
         H.format_line(node.name, false, node.path, depth, width, "right")
       table.insert(lines, line_str)
+      if highlight ~= nil then
+        highlight.line = #lines
+        table.insert(highlights, highlight)
+      end
       line_map[#lines] = { buf = node.buf, path = node.path, kind = node.kind }
     end
   end
@@ -34,15 +50,19 @@ end
 ---@param other_bufs BufEntry[]
 ---@param lines string[]
 ---@param line_map table<integer, BufEntry>
+---@param highlights HighlightSpec[]
 ---@param width integer
-H.render_other = function(other_bufs, lines, line_map, width)
-  table.insert(lines, "  other")
+H.render_other = function(other_bufs, lines, line_map, highlights, width)
   for _, buf_entry in ipairs(other_bufs) do
     -- Other-section entries show their full absolute path (they live outside
     -- cwd), so they truncate left like dirs, not right like tree files.
-    local line_str =
+    local line_str, highlight =
       H.format_line(buf_entry.path, false, buf_entry.path, 0, width, "left")
     table.insert(lines, line_str)
+    if highlight ~= nil then
+      highlight.line = #lines
+      table.insert(highlights, highlight)
+    end
     line_map[#lines] = buf_entry
   end
 end
@@ -107,6 +127,7 @@ H.format_line = function(name, is_dir, path, depth, width, truncate_side)
 end
 
 local M = {}
+M._H = H
 
 ---@param tree TreeNode[]
 ---@param other_bufs BufEntry[]
@@ -116,8 +137,9 @@ M.render = function(tree, other_bufs, width)
   local lines = {}
   local line_map = {}
   local highlights = {}
-  H.render_tree(tree, lines, line_map, 0, width)
-  H.render_other(other_bufs, lines, line_map, width)
+  H.render_tree(tree, lines, line_map, highlights, 0, width)
+  table.insert(lines, "  other")
+  H.render_other(other_bufs, lines, line_map, highlights, width)
 
   return lines, line_map, highlights
 end
