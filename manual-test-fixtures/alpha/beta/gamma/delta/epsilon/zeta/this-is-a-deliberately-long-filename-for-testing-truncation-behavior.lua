@@ -1,0 +1,2 @@
+-- Manual test fixture: deeply nested file with a long name.
+-- Used to check truncation and tree-collapsing behaviour when opened as a buffer.

@@ -114,4 +114,26 @@ T["fit_to_width"] = MiniTest.new_set(nil, {
   }),
 })
 
+T["render_tree"] = MiniTest.new_set(nil, {
+  ["adds a line for each directory"] = function() end,
+  ["uses correct indentation for nested directories"] = function() end,
+  ["adds a line for each file"] = function() end,
+  ["uses correct indentation for files nested within directories"] = function() end,
+  ["adds files into the line_map"] = function() end,
+
+  ["doesn't add directories into the line_map"] = function() end,
+  ["sets each highlight's line to the row its line was inserted at"] = function()
+    _G.MiniIcons = {
+      get = function(_, _)
+        return "🔥", "SomeHlGroup"
+      end,
+    }
+
+    -- build tree, call render_tree, run your assertions here
+
+    _G.MiniIcons = nil
+  end,
+  ["doesn't modify lines, line_map or highlights when tree is empty"] = function() end,
+})
+
 return T

@@ -1,0 +1,2 @@
+-- Manual test fixture: sits partway down the branch, not at a leaf.
+-- Gives its parent dir ("beta") two children (this file + "gamma/") so it can't collapse.
