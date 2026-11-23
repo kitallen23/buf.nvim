@@ -114,6 +114,73 @@ T["fit_to_width"] = MiniTest.new_set(nil, {
   }),
 })
 
+-- 4 bytes, 2 display columns: makes byte vs. column mix-ups visible in offsets.
+local STUB_ICON = "🔥"
+-- Wide enough that no test name is truncated, so the name after the offset is
+-- the name unchanged.
+local WIDE_LINE = 40
+
+-- Asserts the offset is exactly where the name starts, by checking the
+-- 1-based substring after the 0-based offset.
+---@param line string
+---@param offset integer
+---@param name string
+local function expect_name_at_offset(line, offset, name)
+  MiniTest.expect.equality(line:sub(offset + 1), name)
+end
+
+T["format_line"] = MiniTest.new_set(nil, {
+  ["name offset with MiniIcons"] = MiniTest.new_set({
+    hooks = {
+      pre_case = function()
+        _G.MiniIcons = {
+          get = function(_, _)
+            return STUB_ICON, "SomeHlGroup"
+          end,
+        }
+      end,
+      -- In a hook so the stub is removed even when an assertion fails.
+      post_case = function()
+        _G.MiniIcons = nil
+      end,
+    },
+  }, {
+    ["is icon bytes plus one space at depth 0"] = function()
+      local line, _, offset =
+        render._H.format_line("init.lua", false, "init.lua", 0, WIDE_LINE, "right")
+      MiniTest.expect.equality(offset, #STUB_ICON + 1)
+      expect_name_at_offset(line, offset, "init.lua")
+    end,
+    ["includes indent bytes when nested"] = function()
+      local line, _, offset =
+        render._H.format_line("init.lua", false, "a/b/init.lua", 2, WIDE_LINE, "right")
+      MiniTest.expect.equality(offset, 4 + #STUB_ICON + 1)
+      expect_name_at_offset(line, offset, "init.lua")
+    end,
+    ["points at the name for directories too"] = function()
+      local line, _, offset =
+        render._H.format_line("lua/buf", true, "lua/buf", 1, WIDE_LINE, "left")
+      MiniTest.expect.equality(offset, 2 + #STUB_ICON + 1)
+      expect_name_at_offset(line, offset, "lua/buf")
+    end,
+  }),
+
+  ["name offset without MiniIcons"] = MiniTest.new_set(nil, {
+    ["is 0 at depth 0"] = function()
+      local line, _, offset =
+        render._H.format_line("init.lua", false, "init.lua", 0, WIDE_LINE, "right")
+      MiniTest.expect.equality(offset, 0)
+      expect_name_at_offset(line, offset, "init.lua")
+    end,
+    ["is the indent width when nested"] = function()
+      local line, _, offset =
+        render._H.format_line("init.lua", false, "a/b/init.lua", 2, WIDE_LINE, "right")
+      MiniTest.expect.equality(offset, 4)
+      expect_name_at_offset(line, offset, "init.lua")
+    end,
+  }),
+})
+
 T["render_tree"] = MiniTest.new_set(nil, {
   ["adds a line for each directory"] = function() end,
   ["uses correct indentation for nested directories"] = function() end,
