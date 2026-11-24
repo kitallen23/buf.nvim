@@ -96,9 +96,14 @@ end
 local M = {}
 M._H = H
 
-M.attach = function (buf)
+M.attach = function (buf, mappings_config)
   H.disable_edit_keys(buf)
-  H.set_mappings(buf, require("buf.config").default_config.mappings)
+  H.set_mappings(buf, mappings_config)
+
+  vim.api.nvim_exec_autocmds("User", {
+    pattern = "BufBufferCreate",
+    data = { buf_id = buf }
+  })
 end
 
 return M

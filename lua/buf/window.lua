@@ -105,9 +105,10 @@ M.open = function(window_config)
     )
   end
   vim.bo[buf].modifiable = false
+  vim.bo[buf].filetype = "buf"
 
   -- Mappings
-  require("buf.keymaps").attach(buf)
+  require("buf.keymaps").attach(buf, require("buf").config.mappings)
 
   -- Window config: height fits content, clamped to [height_min, height_max]
   local height = math.max(
