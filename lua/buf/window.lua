@@ -80,12 +80,16 @@ M._H = H
 M.open = function(window_config)
   local tree = require("buf.tree")
   local render = require("buf.render")
+  local state = require("buf.state")
 
-  -- 1. Build and render content
+  state.source_win = vim.api.nvim_get_current_win()
+
+  -- Build and render content
   local t, other = tree.build()
   local lines, line_map, highlights, name_offsets = render.render(t, other, 40)
+  state.line_map = line_map
 
-  -- 2. Populate a scratch buffer (lines + highlight extmarks), then lock it
+  -- Populate a scratch buffer (lines + highlight extmarks), then lock it
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, true, lines)
   for _, highlight in ipairs(highlights) do
@@ -102,7 +106,10 @@ M.open = function(window_config)
   end
   vim.bo[buf].modifiable = false
 
-  -- 3. Window config: height fits content, clamped to [height_min, height_max]
+  -- Mappings
+  require("buf.keymaps").attach(buf)
+
+  -- Window config: height fits content, clamped to [height_min, height_max]
   local height = math.max(
     window_config.height_min,
     math.min(#lines, window_config.height_max)
@@ -118,11 +125,11 @@ M.open = function(window_config)
     height = height,
     style = "minimal",
   }
-  -- 4. Open the float and set window-local options
+  -- Open the float and set window-local options
   local window = vim.api.nvim_open_win(buf, true, config)
   vim.wo[window].cursorline = true
 
-  -- 5. Keep the cursor on buffer names: snap once now, then on every move
+  -- Keep the cursor on buffer names: snap once now, then on every move
   H.snap_cursor_to_name(window, name_offsets)
   vim.api.nvim_create_autocmd("CursorMoved", {
     buffer = buf,
@@ -131,16 +138,9 @@ M.open = function(window_config)
       H.snap_cursor_to_name(window, name_offsets)
     end,
   })
-  -- vim.api.nvim_create_autocmd("InsertEnter", {
-  --   buffer = buf,
-  --   desc = "Don't enter insert mode",
-  --   callback = function()
-  --     vim.schedule(function()
-  --       vim.api.nvim_command("stopinsert")
-  --     end)
-  --   end,
-  -- })
 
+  state.buf_id = buf
+  state.win_id = window
   return window
 end
 

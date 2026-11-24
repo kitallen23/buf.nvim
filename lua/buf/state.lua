@@ -9,6 +9,7 @@ local M = {
   },
   pinned_buffers = {},
   cursor_line = nil,
+  line_map = {},
 }
 
 M.toggle_pin = function(buf_id)
